@@ -1,0 +1,74 @@
+#include <iostream>
+#include <cstdlib>
+using namespace std;
+void displayOP(){
+    cout<<"Welcome to the bank "<<endl;
+    cout<<"Press 1 to check balance"<<endl;
+    cout<<"Press 2 to Withdraw money"<<endl;
+    cout<<"Press 3 to Deposit money" <<endl;
+    cout<<"Press 4 to Exit" <<endl;
+}
+int main(){
+    int pin=874;
+    double balance = 7635.98;
+    int password;
+    int maxattempt=3;
+    int attempt=0;
+    while (attempt<maxattempt){
+        cout<<"Enter the PIN";
+        cin>>password;
+        if (password==pin){
+            break;
+        }
+        else{
+           attempt++;
+           cout<<"Wrong pin, Please try again"<<endl;
+           if(attempt==maxattempt){
+               cout<<"PIN wrong, maximum tries reached."<<endl;
+               cout<< " *****EXITING***** "<<endl;
+               return 0;
+           }
+        }
+        }
+    
+
+    int choice;
+    double withdraw;
+    double deposit;
+    
+    do {
+        displayOP();
+    cout<<"Enter Choice";
+    cin>>choice;
+    switch(choice){
+        case 1: 
+        cout<<"Your bank balance is"<<balance<<endl;
+        break;
+        case 2:
+        cout<<"How much money would you like to withdraw?"<<endl;
+        cin>>withdraw;
+        if(withdraw>balance){
+            cout<<"Insufficient funds!"<<endl;
+        }
+        else {
+            balance-=withdraw;
+            cout << " Withdraw of " << withdraw << " Done " << endl;
+            cout << " Current balance is " << balance << endl;
+        }
+        break;
+        case 3:
+        cout << "How much money would you like to deposit?";
+        cin >> deposit;
+        balance +=deposit;
+        cout <<"Current balance is"<<balance;
+        break;
+
+        case 4:
+        cout<<"Thank you!";
+        break;
+        default:
+        cout<<"Invalid choice, please enter a number between 1 and 4";
+    }
+    
+    }while (choice!=4);
+}
