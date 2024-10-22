@@ -1,0 +1,62 @@
+# a game of tic tac toe which takes input from the user for the turn and if the conditions of winning are met, informs the user on who won
+def sum(a, b, c):
+    return a + b + c
+
+def print_board(Xchance, YChance):
+    zero = 'X' if Xchance[0] else ('0' if YChance[0] else 0)
+    one = 'X' if Xchance[1] else ('0' if YChance[1] else 1)
+    two = 'X' if Xchance[2] else ('0' if YChance[2] else 2)
+    three = 'X' if Xchance[3] else ('0' if YChance[3] else 3)
+    four = 'X' if Xchance[4] else ('0' if YChance[4] else 4)
+    five = 'X' if Xchance[5] else ('0' if YChance[5] else 5)
+    six = 'X' if Xchance[6] else ('0' if YChance[6] else 6)
+    seven = 'X' if Xchance[7] else ('0' if YChance[7] else 7)
+    eight = 'X' if Xchance[8] else ('0' if YChance[8] else 8)
+    
+    print(f" {zero} | {one} | {two}")
+    print("----------")
+    print(f" {three} | {four} | {five}")
+    print("----------")
+    print(f" {six} | {seven} | {eight}")
+
+def wincheck(Xchance, YChance):
+    wins = [[0, 1, 2], [2, 5, 8], [8, 7, 6], [6, 3, 0],
+            [3, 4, 5], [6, 7, 8], [0, 4, 8], [2, 4, 6]]
+    for win in wins:
+        if sum(Xchance[win[0]], Xchance[win[1]], Xchance[win[2]]) == 3:
+            print('X wins')
+            return 1
+        if sum(YChance[win[0]], YChance[win[1]], YChance[win[2]]) == 3:
+            print('Y wins')
+            return 0
+    return -1
+
+if __name__ == "__main__":
+    Xchance = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    YChance = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    turn = 1
+    print("Welcome to the game of TIC TAC TOE")
+    
+    while True:
+        print_board(Xchance, YChance)
+        if turn == 1:
+            print("X's chance")
+            value = int(input("Enter a value to insert: "))
+            if value < 0 or value > 8 or Xchance[value] or YChance[value]:
+                print("Invalid move, try again.")
+                continue
+            Xchance[value] = 1
+        else:
+            print("Y's chance")
+            value = int(input("Enter a value to insert: "))
+            if value < 0 or value > 8 or Xchance[value] or YChance[value]:
+                print("Invalid move, try again.")
+                continue
+            YChance[value] = 1
+        
+        cwin = wincheck(Xchance, YChance)
+        if cwin != -1:
+            print_board(Xchance, YChance)
+            print("Match Over")
+            break
+        turn = 1 - turn
