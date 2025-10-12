@@ -1,0 +1,168 @@
+import streamlit as st
+import requests
+import json
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
+
+def is_valid_url(url_string: str) -> bool:
+    try:
+        result = urlparse(url_string)
+        return all([result.scheme, result.netloc])
+    except (ValueError, AttributeError):
+        return False
+
+def extract_article_text(html: str) -> str:
+    try:
+        soup = BeautifulSoup(html, 'html.parser')
+        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'aside']):
+            element.decompose()
+
+        best_element = soup.body
+        max_paragraphs = 0
+        if best_element:
+            for element in soup.find_all(['div', 'article', 'main']):
+                p_count = len(element.find_all('p', recursive=False))
+                if p_count > max_paragraphs and len(element.get_text(strip=True)) > 200:
+                    max_paragraphs = p_count
+                    best_element = element
+
+        if not best_element:
+            return ""
+
+        text = best_element.get_text(separator=' ', strip=True)
+        return ' '.join(text.split())
+    except Exception as e:
+        st.error(f"Error extracting text: {e}")
+        return ""
+
+def get_gemini_analysis(text: str, url: str, api_key: str) -> dict:
+    gemini_api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={api_key}"
+    
+    combined_prompt = f"""You are a world-class investigative journalist and fake news analysis AI. Your task is to analyze the provided article text and its source to determine its likely authenticity.
+Provide your analysis ONLY in a valid JSON format with the following structure:
+{{
+  "classification": "...",
+  "confidence_score": ...,
+  "summary": "...",
+  "reasoning": "...",
+  "source_check": "..."
+}}
+Do not include any text, notes, or markdown formatting outside of the JSON object.
+
+---
+Please analyze the following information for authenticity.
+
+Source URL: {url}
+Article Text/Claim:
+"{text[:8000]}"
+"""
+
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": combined_prompt}]}],
+        "tools": [{"google_search": {}}]
+    }
+    
+    try:
+        response = requests.post(gemini_api_url, json=payload, timeout=60)
+        response.raise_for_status()
+        
+        result = response.json()
+        candidate = result.get("candidates", [{}])[0]
+        json_text = candidate.get("content", {}).get("parts", [{}])[0].get("text")
+
+        if json_text:
+            # Clean potential markdown fences from the response
+            cleaned_json_text = json_text.strip().replace("```json", "").replace("```", "")
+            return json.loads(cleaned_json_text)
+        else:
+            raise ValueError("Failed to parse analysis from AI. The response was empty or malformed.")
+            
+    except requests.exceptions.HTTPError as http_err:
+        if response.status_code == 403:
+            raise PermissionError("Authentication failed. Please check if your Google Gemini API Key is correct and has the necessary permissions.")
+        else:
+            raise ConnectionError(f"An HTTP error occurred: {http_err} - {response.text}")
+    except requests.exceptions.RequestException as e:
+        raise ConnectionError(f"Network error calling Gemini API. Please check your connection. Details: {e}")
+    except json.JSONDecodeError:
+        raise ValueError("The AI returned an invalid analysis format. Please try again.")
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
+        raise
+
+st.set_page_config(page_title="Fake News Analyzer", page_icon="📰", layout="wide")
+
+st.title("📰 Real-Time Fake News Analyzer")
+st.markdown("Enter a news article URL or a piece of text to analyze its authenticity using AI.")
+
+st.sidebar.header("Configuration")
+api_key = st.sidebar.text_input("Enter your Google Gemini API Key", type="password", help="Get your key from Google AI Studio.")
+
+if 'history' not in st.session_state:
+    st.session_state.history = []
+
+with st.form("analyzer_form"):
+    user_input = st.text_input("Enter URL or Text to Analyze", placeholder="https://www.example.com/news-article or 'Is this claim true?'", key="user_input_box")
+    submitted = st.form_submit_button("Analyze", type="primary")
+
+if submitted:
+    if not api_key:
+        st.error("Please enter your Google Gemini API Key in the sidebar to proceed.")
+    elif not user_input:
+        st.warning("Please enter a URL or some text to analyze.")
+    else:
+        with st.spinner("Analyzing... This may take a moment."):
+            try:
+                article_text = ""
+                source_url = "N/A (Text Input)"
+                
+                if is_valid_url(user_input):
+                    st.write(f"_Input detected as URL. Fetching content..._")
+                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+                    response = requests.get(user_input, headers=headers, timeout=10)
+                    response.raise_for_status()
+
+                    article_text = extract_article_text(response.text)
+                    if not article_text or len(article_text) < 100:
+                        st.error("Could not extract enough readable text from the URL. The site may block scraping.")
+                        st.stop()
+                    source_url = user_input
+                else:
+                    st.write(f"_Input detected as text._")
+                    article_text = user_input
+                    if len(article_text) < 20:
+                        st.warning("Please enter a longer sentence or claim for a more accurate analysis.")
+                        st.stop()
+                
+                analysis = get_gemini_analysis(article_text, source_url, api_key)
+                analysis['input'] = user_input 
+                st.session_state.history.insert(0, analysis)
+
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+
+if st.session_state.history:
+    st.markdown("---")
+    st.subheader("Analysis History")
+    for i, analysis in enumerate(st.session_state.history):
+        with st.expander(f"**{analysis.get('input', 'Analysis')}** - Classification: {analysis.get('classification', 'Uncertain')}", expanded=(i==0)):
+            classification = analysis.get('classification', 'Uncertain')
+            confidence = analysis.get('confidence_score', 0)
+            
+            if classification == 'Likely Real':
+                st.success(f"**Classification: {classification}**")
+            elif classification == 'Likely Fake':
+                st.error(f"**Classification: {classification}**")
+            else:
+                st.warning(f"**Classification: {classification}**")
+            
+            st.markdown(f"**Confidence Score:** `{confidence}%`")
+            st.progress(confidence / 100)
+
+            st.markdown(f"**Summary:**\n> {analysis.get('summary', 'No summary provided.')}")
+            st.markdown(f"**Reasoning:**\n> {analysis.get('reasoning', 'No reasoning provided.')}")
+            st.markdown(f"**Source Check:**\n> {analysis.get('source_check', 'No source check provided.')}")
+
+st.sidebar.markdown("---")
+st.sidebar.info("This app uses Google Gemini for real-time analysis.")
+
